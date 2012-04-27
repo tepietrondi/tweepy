@@ -2,7 +2,12 @@
 # Copyright 2009-2010 Joshua Roesslein
 # See LICENSE for details.
 
-import httplib,logging
+#import httplib
+import logging
+
+import urllib
+import urllib2
+
 from socket import timeout
 from threading import Thread
 from time import sleep
@@ -89,7 +94,7 @@ class Stream(object):
     def _run(self):
         # Authenticate
         url = "%s://%s%s" % (self.scheme, self.host, self.url)
-        logging.info(url)
+        print url
         # Connect and process the stream
         error_counter = 0
         conn = None
@@ -99,26 +104,33 @@ class Stream(object):
                 # quit if error count greater than retry count
                 break
             try:
-                if self.scheme == "http":
-                    conn = httplib.HTTPConnection(self.host,timeout=self.timeout)
-                else:
-                    conn = httplib.HTTPSConnection(self.host,timeout=self.timeout)
-                self.auth.apply_auth(url, 'POST', self.headers, self.parameters)
-                logging.info(self.headers)
-                conn.connect()
+                #if self.scheme == "http":
+                #    conn = httplib.HTTPConnection(self.host,timeout=self.timeout)
+                #else:
+                #    conn = httplib.HTTPSConnection(self.host,timeout=self.timeout)
                 
-                conn.request('POST', self.url, self.body, headers=self.headers)
-                logging.info("connected")
-                resp = conn.getresponse()
-                logging.info("got response")
-                if resp.status != 200:
-                    if self.listener.on_error(resp.status) is False:
-                        break
-                    error_counter += 1
-                    sleep(self.retry_time)
-                else:
-                    error_counter = 0
-                    self._read_loop(resp)
+                self.auth.apply_auth(url, 'POST', self.headers, self.parameters)
+                
+                data = urllib.urlencode(self.parameters)
+                req = urllib2.Request(url, None, self.headers)
+                response = urllib2.urlopen(req)
+                #the_page = response.read()
+                
+                #logging.info(response)
+                #conn.connect()
+                
+                #conn.request('POST', self.url, self.body, headers=self.headers)
+                #logging.info("connected")
+                #resp = conn.getresponse()
+                #logging.info("got response")
+                #if response.status != 200:
+                #    if self.listener.on_error(response.status) is False:
+                #        break
+                #    error_counter += 1
+                #    sleep(self.retry_time)
+                #else:
+                error_counter = 0
+                self._read_loop(response)
             except timeout:
                 
                 if self.listener.on_timeout() == False:
@@ -146,29 +158,31 @@ class Stream(object):
                 self.running = False
 
     def _read_loop(self, resp):
-
-        while self.running and not resp.isclosed():
+        
+        while self.running: # and not resp.isclosed():
 
             # Note: keep-alive newlines might be inserted before each length value.
             # read until we get a digit...
             c = '\n'
-            while c == '\n' and self.running and not resp.isclosed():
+            while c == '\n' and self.running: # and not resp.isclosed():
                 c = resp.read(1)
             delimited_string = c
             
             # read rest of delimiter length..
             d = ''
-            while d != '\n' and self.running and not resp.isclosed():
+            while d != '\n' and self.running: # and not resp.isclosed():
                 d = resp.read(1)
                 delimited_string += d
+
+            #print delimited_string
 
             # read the next twitter status object
             if delimited_string.strip().isdigit():
                 next_status_obj = resp.read( int(delimited_string) )
                 self._data(next_status_obj)
 
-        if resp.isclosed():
-            self.on_closed(resp)
+        #if resp.isclosed():
+        #    self.on_closed(resp)
 
     def _start(self, async):
         self.running = True
