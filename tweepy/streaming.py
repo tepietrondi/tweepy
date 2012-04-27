@@ -2,7 +2,7 @@
 # Copyright 2009-2010 Joshua Roesslein
 # See LICENSE for details.
 
-import httplib
+import httplib,logging
 from socket import timeout
 from threading import Thread
 from time import sleep
@@ -82,13 +82,14 @@ class Stream(object):
 
         self.api = API()
         self.headers = options.get("headers") or {}
+        
         self.parameters = None
         self.body = None
 
     def _run(self):
         # Authenticate
         url = "%s://%s%s" % (self.scheme, self.host, self.url)
-
+        logging.info(url)
         # Connect and process the stream
         error_counter = 0
         conn = None
@@ -99,14 +100,17 @@ class Stream(object):
                 break
             try:
                 if self.scheme == "http":
-                    conn = httplib.HTTPConnection(self.host)
+                    conn = httplib.HTTPConnection(self.host,timeout=self.timeout)
                 else:
-                    conn = httplib.HTTPSConnection(self.host)
+                    conn = httplib.HTTPSConnection(self.host,timeout=self.timeout)
                 self.auth.apply_auth(url, 'POST', self.headers, self.parameters)
+                logging.info(self.headers)
                 conn.connect()
-                conn.sock.settimeout(self.timeout)
+                
                 conn.request('POST', self.url, self.body, headers=self.headers)
+                logging.info("connected")
                 resp = conn.getresponse()
+                logging.info("got response")
                 if resp.status != 200:
                     if self.listener.on_error(resp.status) is False:
                         break
@@ -116,6 +120,7 @@ class Stream(object):
                     error_counter = 0
                     self._read_loop(resp)
             except timeout:
+                
                 if self.listener.on_timeout() == False:
                     break
                 if self.running is False:
@@ -124,6 +129,7 @@ class Stream(object):
                 sleep(self.snooze_time)
             except Exception, exception:
                 # any other exception is fatal, so kill loop
+                
                 break
 
         # cleanup
@@ -149,7 +155,7 @@ class Stream(object):
             while c == '\n' and self.running and not resp.isclosed():
                 c = resp.read(1)
             delimited_string = c
-
+            
             # read rest of delimiter length..
             d = ''
             while d != '\n' and self.running and not resp.isclosed():
@@ -157,7 +163,7 @@ class Stream(object):
                 delimited_string += d
 
             # read the next twitter status object
-            if delimited_string.isdigit():
+            if delimited_string.strip().isdigit():
                 next_status_obj = resp.read( int(delimited_string) )
                 self._data(next_status_obj)
 
