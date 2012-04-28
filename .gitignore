@@ -5,7 +5,3 @@ dist/
 tweepy.egg-info/
 
 .DS_Store
-
-tweepy/social_keys.py
-
-social_keys.py
